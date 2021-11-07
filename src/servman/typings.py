@@ -10,14 +10,16 @@ from typing import Any, TypedDict, Literal
     }
 """
 
-class Parcel(TypedDict):
+class IParcel(TypedDict):
     routing: Literal['servman'] or Literal['client'] or Literal['service']
     origin_id: str
     destination_id: str
     action: str
     data: Any
 
-class Config(TypedDict):
+class IConnectionConfig(TypedDict):
     host: str
     port: int
+
+class IServmanConfig(IConnectionConfig):
     logging: bool

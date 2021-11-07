@@ -15,3 +15,7 @@ class Service:
     
     def close(self):
         self.process.close()
+
+class TestTarget:
+    def __init__(self, params):
+        pass

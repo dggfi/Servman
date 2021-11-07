@@ -1,13 +1,15 @@
 import multiprocessing
 import asyncio
 from asyncio import Queue
+
+from asyncio.futures import Future
 import websockets
 import traceback, logging
 import json
 from json.decoder import JSONDecodeError
 from path import Path
 from collections import defaultdict
-from .typings import Config, Parcel
+from .typings import IConnectionConfig, IParcel
 from .service import Service
 
 
@@ -16,7 +18,7 @@ class ServiceManager:
        A task scheduler and communication proxy between clients
        and scheduled tasks. Server-like. 
     """
-    def __init__(self, config_path, default_service=None):
+    def __init__(self, config_path: str, default_service: function or Future or None=None):
         if default_service:
             self._default_service = default_service
 
@@ -35,7 +37,7 @@ class ServiceManager:
             print(f"The JSON in {config_path} is not formatted correctly.")
             exit()
 
-        self.config: Config = config
+        self.config: IConnectionConfig = config
 
         # Actions
         actions = {
@@ -92,7 +94,7 @@ class ServiceManager:
         await self.register_websocket(websocket)
         try:
             async for message in websocket:
-                parcel: Parcel = json.loads(message)
+                parcel: IParcel = json.loads(message)
                 await self.routes[parcel['routing']](parcel)
         except Exception as e:
             print(f"Error in ServiceManger.handle_websocket: {e}")
@@ -103,7 +105,6 @@ class ServiceManager:
     async def register_websocket(self, websocket):
         origin_id = ''
         connection_id = ''
-        
         try:
             origin_id = websocket.request_headers['origin']
             connection_id = websocket.request_headers['connection_id']
@@ -128,17 +129,17 @@ class ServiceManager:
             await websocket.close()
     
     # Actions -- Error
-    async def bad_action(self, parcel: Parcel):
+    async def bad_action(self, parcel: IParcel):
         print(f"Error: Got a bad action! '{parcel['action']}'' in parcel {parcel}")
     
-    async def bad_route(self, parcel: Parcel):
+    async def bad_route(self, parcel: IParcel):
         print(f"ERROR: Got a bad route! '{parcel['route']}' in parcel {parcel}")
     
     # Actions -- Parcels
-    async def open_here(self, parcel: Parcel):
+    async def open_here(self, parcel: IParcel):
         await self.actions[parcel['action']](parcel)
     
-    async def route_to_other(self, parcel: Parcel):
+    async def route_to_other(self, parcel: IParcel):
         connection = self.connections.get(parcel['destination_id'], None)
         if connection:
             await connection.send(json.dumps(parcel))
@@ -147,7 +148,7 @@ class ServiceManager:
             await self.unregister_websocket(self.connections[parcel['destination_id']])
     
     # Actions -- Services
-    async def create_service(self, parcel: Parcel, target=None):
+    async def create_service(self, parcel: IParcel, target=None):
         if not target:
             target = self._default_service
 
