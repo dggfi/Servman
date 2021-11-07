@@ -11,6 +11,7 @@ from path import Path
 from collections import defaultdict
 from .typings import IConnectionConfig, IParcel
 from .service import Service
+from typing import Callable, Coroutine
 
 
 class ServiceManager:
@@ -18,7 +19,7 @@ class ServiceManager:
        A task scheduler and communication proxy between clients
        and scheduled tasks. Server-like. 
     """
-    def __init__(self, config_path: str, default_service: function or Future or None=None):
+    def __init__(self, config_path: str, default_service: Callable or Coroutine or None=None):
         if default_service:
             self._default_service = default_service
 
