@@ -4,4 +4,4 @@ Servman schedules tasks inside of individual processes and exposes a websocket i
 
 ## API
 
-Coming soon.
+### As a client

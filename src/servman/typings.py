@@ -1,18 +1,17 @@
 from typing import Any, TypedDict, Literal
 
 """
-    INTERFACES
+    MISC
 
-    websocket headers interface
+    websocket headers
     {
-        'agent_type': 'discord_client' | 'web_client' | 'service',
-        'connection_id': string
+        'agent': 'servman' | 'client' | 'service',
+        'agent_id': string
     }
 """
 
 class IParcel(TypedDict):
     routing: Literal['servman'] or Literal['client'] or Literal['service']
-    origin_id: str
     destination_id: str
     action: str
     data: Any

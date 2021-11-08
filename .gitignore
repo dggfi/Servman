@@ -1,4 +1,7 @@
+build.sh
 __pycache__
 dist/
 src/__pycache__
-build.sh
+src/servman_*
+venv/
+.venv/

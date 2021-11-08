@@ -1,27 +1,23 @@
 import multiprocessing
 import asyncio
-from asyncio import Queue
-
-from asyncio.futures import Future
 import websockets
 import traceback, logging
 import json
 from json.decoder import JSONDecodeError
 from path import Path
+from uuid import uuid4 as uuidv4
 from collections import defaultdict
-from .typings import IConnectionConfig, IParcel
-from .service import Service
-from typing import Callable, Coroutine
-
+from typings import IConnectionConfig, IParcel
+from service import Service, ServicePool
+from typing import Any, Callable
 
 class ServiceManager:
     """
        A task scheduler and communication proxy between clients
        and scheduled tasks. Server-like. 
     """
-    def __init__(self, config_path: str, default_service: Callable or Coroutine or None=None):
-        if default_service:
-            self._default_service = default_service
+    def __init__(self, config_path: str):
+        self.agent_id = str(uuidv4())
 
         # Config
         config_path = Path(config_path)
@@ -51,38 +47,30 @@ class ServiceManager:
         # Routes
         routes = {
             'servman': self.open_here,
-            'client': self.route_to_client,
-            'service': self.route_to_service
+            'client': self.route_to_other,
+            'service': self.route_to_other
         }
 
         def return_bad_route(): return self.bad_route
         self.routes = defaultdict(return_bad_route, routes)
 
-        # Websockets
-        self.host = config['host']
-        self.port = config['port']
-        self.server = websockets.serve(
-            self.handle_websockets,
-            self.host,
-            self.port,
-            max_queue=2048,
-            max_size=None,
-            origins=[]
-        )
-
-        # Connections
-        self.connections = {} # origin_id: service
-        self.allowed_origins = set([
-            'discord_client',
-            'web_client',
+        self.allowed_agents = set([
+            'client',
             'service'
         ])
 
-        # Sockets
-        self.registered_sockets = {}
+        # Websockets API
+        self.host = config['host']
+        self.port = config['port']
+        self.connection_config = {
+            'host': self.host,
+            'port': self.port
+        }
 
-        # Messageing
-        self.outgoing_parcels = Queue() # A websocket message
+        # Collections
+        self.agent_to_websocket = {} # agent_id: websocket
+        self.agent_to_services = {} # agent_id: Service
+        self.tasks = {} # str: Callable
 
         # Misc.
         self.t_ping = None
@@ -90,95 +78,145 @@ class ServiceManager:
         self.logger.setLevel(logging.ERROR)
         self.logger.addHandler(logging.StreamHandler())
     
-    # Websockets
-    async def handle_websocket(self, websocket):
-        await self.register_websocket(websocket)
-        try:
-            async for message in websocket:
-                parcel: IParcel = json.loads(message)
-                await self.routes[parcel['routing']](parcel)
-        except Exception as e:
-            print(f"Error in ServiceManger.handle_websocket: {e}")
-            traceback.print_exc()
-        finally:
-            await self.unregister_websocket(websocket)
-    
+
+    ### Websocket
     async def register_websocket(self, websocket):
-        origin_id = ''
-        connection_id = ''
+        print("Registering a new websocket connection.")
+        agent = ''
+        agent_id = ''
         try:
-            origin_id = websocket.request_headers['origin']
-            connection_id = websocket.request_headers['connection_id']
+            agent = websocket.request_headers['agent']
+            agent_id = websocket.request_headers['agent_id']
         except KeyError:
             print("WARNING: Websocket missing critical Register field in request header.")
             return
         
-        if origin_id not in self.allowed_origins:
-            print(f"WARNING: Websocket made request with invalid origin {origin_id}.")
+        if agent not in self.allowed_agents:
+            print(f"WARNING: Websocket made request with invalid agent {agent}.")
             return
         
-        self.connections[connection_id] =  websocket
+        self.agent_to_websocket[agent_id] =  websocket
+
 
     async def unregister_websocket(self, websocket):
+        print("Unregistering an old websocket connection.")
         try:
-            connection_id = websocket.request_headers['connection_id']
+            agent_id = websocket.request_headers['agent_id']
         except KeyError:
-            print(f"Warning: Websocket missing origin_id in the request header")
+            print(f"Warning: Websocket missing agent_id in the request header")
             return
         finally:
-            self.connections.pop(connection_id, None)
+            self.agent_to_websocket.pop(agent_id, None)
             await websocket.close()
     
-    # Actions -- Error
-    async def bad_action(self, parcel: IParcel):
+
+    ### Actions -- Error
+    async def bad_action(self, parcel: IParcel, websocket):
         print(f"Error: Got a bad action! '{parcel['action']}'' in parcel {parcel}")
     
-    async def bad_route(self, parcel: IParcel):
+
+    async def bad_route(self, parcel: IParcel, websocket):
         print(f"ERROR: Got a bad route! '{parcel['route']}' in parcel {parcel}")
     
+
     # Actions -- Parcels
-    async def open_here(self, parcel: IParcel):
-        await self.actions[parcel['action']](parcel)
+    async def open_here(self, parcel: IParcel, websocket):
+        await self.actions[parcel['action']](parcel, websocket)
     
-    async def route_to_other(self, parcel: IParcel):
-        connection = self.connections.get(parcel['destination_id'], None)
-        if connection:
-            await connection.send(json.dumps(parcel))
-        else:
-            print(f"ERROR: Connection with ID {parcel['destination_id']} not found!")
-            await self.unregister_websocket(self.connections[parcel['destination_id']])
-    
-    # Actions -- Services
-    async def create_service(self, parcel: IParcel, target=None):
-        if not target:
-            target = self._default_service
 
-        # construct params
-        args = tuple()
-        connection_ids = {
-            'client_connection_id': parcel['origin_id'],
-            'service_connection_id': parcel['destination_id']
-        }
-        meta = parcel['data']['meta']
-        connection_config = {
-            'host': self.config['host'],
-            'port': self.config['port']
-        }
+    async def route_to_other(self, parcel: IParcel, websocket):
+        destination_websocket = self.agent_to_websocket[parcel['destination_id']]
+        await destination_websocket.send(json.dumps(parcel))
+    
+
+    def new_service_pool(self, owner_id):
+        return ServicePool(owner_id)
+
+
+    ### Actions -- Services
+    async def create_service(self, parcel: IParcel, websocket):
+        target = parcel['data']['target']
+        task = self.tasks[target]
+
+        args = parcel['data']['args']
         kwargs = {
-            'connection_ids': connection_ids,
-            'meta': meta,
-            'connection_config': connection_config,
+            'connection_config': self.connection_config
         }
-        params = {
-            'args': args,
-            'kwargs': kwargs
-        }
+        kwargs.update(parcel['data']['kwargs'])
 
-        service = Service(target, params)
-        self.connections[connection_ids['service_connection_id']] = service
+        owner_id = websocket.request_headers['agent_id']
+        params = { 'args': args, 'kwargs': kwargs }
+
+        service_pool = self.agent_to_services.get(owner_id, None)
+        if not service_pool:
+            service_pool = ServicePool(owner_id)
+            self.agent_to_services[owner_id] = service_pool
+        
+        hash = parcel['data']['hash']
+        service = Service(owner_id, websocket, task, params)
+        service_pool.add_service(hash, service)
         service.run()
+
+
+    async def close_service(self, parcel: IParcel, websocket):
+        agent_id = websocket.request_headers['agent_id']
+        hash = parcel['data']['hash']
+        
+        service_pool: ServicePool = self.agent_to_services[agent_id]
+        service_pool.close_service(hash)
+
+
+    def extend_tasks(self, key: str, task: Callable):
+        self.tasks[key] = task
+
+
+    ### Tasks
+    async def do_work(self):
+        print("Starting Servman.")
+
+        extra_headers = [
+            ('agent', 'servman'),
+            ('agent_id', self.agent_id)
+        ]
+
+        async def handle_websocket(websocket, request_path):
+            print("Handling websocket")
+            await self.register_websocket(websocket)
+            
+            async for message in websocket:
+                try:
+                    parcel: IParcel = json.loads(message)
+                    await self.routes[parcel['routing']](parcel, websocket)
+                except JSONDecodeError:
+                    print(f"Error in ServiceManager.handle_websocket: {e}")
+                    print(f"Message not encoded in JSON.")
+                except Exception as e:
+                    print(f"Error in ServiceManager.handle_websocket: {e}")
+                    traceback.print_exc()
+                    new_parcel: IParcel = {
+                        'routing': parcel['agent'],
+                        'action': 'handle_error',
+                        'data': f"Error in ServiceManager: {e}"
+                    }
+                    await websocket.send(json.dumps(new_parcel))
+
+            await self.unregister_websocket(websocket)
+
+        self.server = await websockets.serve(
+            handle_websocket,
+            host=self.host,
+            port=self.port,
+            max_queue=1024,
+            max_size=None,
+            extra_headers=extra_headers,
+            origins=[None]
+        )
+
+        while True:
+            await asyncio.Future()
+
 
     def run(self):
         multiprocessing.set_start_method("spawn")
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.server)
+        loop.run_until_complete(self.do_work())
