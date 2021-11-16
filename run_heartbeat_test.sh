@@ -19,13 +19,13 @@ python3 -m pip install -U bidict
 mkdir conf
 echo "{\"host\": \"localhost\", \"port\": 8000}" > conf/server_configuration.json
 
-cp tests/heartbeat/* src/servman/
+cp examples/heartbeat/* src/servman/
 
 # Server
-python3 src/servman/test_server.py &
+python3 src/servman/heartbeat_server.py &
 
 # Clients
-python3 src/servman/test_clients.py
+python3 src/servman/heartbeat_clients.py
 
 # Done
 deactivate
@@ -33,8 +33,9 @@ deactivate
 # Purge
 rm -rf venv/
 rm -rf conf/
-rm src/servman/heartbeat.py
-rm src/servman/test_server.py
-rm src/servman/test_clients.py
+rm src/servman/client.py
+rm src/servman/service.py
+rm src/servman/heartbeat_server.py
+rm src/servman/heartbeat_clients.py
 
 echo "Tests complete."

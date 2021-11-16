@@ -8,15 +8,29 @@ from path import Path
 from uuid import uuid4 as uuidv4
 from collections import defaultdict
 from typings import IConnectionConfig, IParcel
-from service import Service, ServicePool
-from typing import Any, Callable
+from service_pool import Service, ServicePool
+from typing import Any, Awaitable, Callable, Iterable
+
 
 class ServiceManager:
     """
-       A task scheduler and communication proxy between clients
-       and scheduled tasks. Server-like. 
+        A task scheduler and communication proxy between clients
+        and scheduled tasks. Server-like.
+
+        The ServiceManager object is the core of the servman project.
+        Basic usage is to create a ServiceManger and then tell it which tasks
+        you would like to service. Meanwhile, it will automatically create a websocket
+        server based on the configuration file you provide for it. You usually
+        will want to design your Client and corresponding Service to connect
+        to the ServiceManager.
+
+        A simple heartbeat.py project is available in the examples folder.
+        For a more complex integration, checkout the MafiaBot project which
+        uses discord.py (https://github.com/dggfi/MafiaBot)
+
+        Note: 
     """
-    def __init__(self, config_path: str):
+    def __init__(self, config_path):
         self.agent_id = str(uuidv4())
 
         # Config
@@ -69,7 +83,7 @@ class ServiceManager:
 
         # Collections
         self.agent_to_websocket = {} # agent_id: websocket
-        self.agent_to_services = {} # agent_id: Service
+        self.client_to_service_pools = {} # agent_id: Service
         self.tasks = {} # str: Callable
 
         # Misc.
@@ -81,7 +95,6 @@ class ServiceManager:
 
     ### Websocket
     async def register_websocket(self, websocket):
-        print("Registering a new websocket connection.")
         agent = ''
         agent_id = ''
         try:
@@ -99,7 +112,6 @@ class ServiceManager:
 
 
     async def unregister_websocket(self, websocket):
-        print("Unregistering an old websocket connection.")
         try:
             agent_id = websocket.request_headers['agent_id']
         except KeyError:
@@ -122,7 +134,7 @@ class ServiceManager:
     # Actions -- Parcels
     async def open_here(self, parcel: IParcel, websocket):
         await self.actions[parcel['action']](parcel, websocket)
-    
+
 
     async def route_to_other(self, parcel: IParcel, websocket):
         destination_websocket = self.agent_to_websocket[parcel['destination_id']]
@@ -147,10 +159,10 @@ class ServiceManager:
         owner_id = websocket.request_headers['agent_id']
         params = { 'args': args, 'kwargs': kwargs }
 
-        service_pool = self.agent_to_services.get(owner_id, None)
+        service_pool = self.client_to_service_pools.get(owner_id, None)
         if not service_pool:
             service_pool = ServicePool(owner_id)
-            self.agent_to_services[owner_id] = service_pool
+            self.client_to_service_pools[owner_id] = service_pool
         
         hash = parcel['data']['hash']
         service = Service(owner_id, websocket, task, params)
@@ -162,13 +174,13 @@ class ServiceManager:
         agent_id = websocket.request_headers['agent_id']
         hash = parcel['data']['hash']
         
-        service_pool: ServicePool = self.agent_to_services[agent_id]
+        service_pool: ServicePool = self.client_to_service_pools[agent_id]
         service_pool.close_service(hash)
 
-
-    def extend_tasks(self, key: str, task: Callable):
+    def register_task(self, key: str, task: Callable):
+        if self.tasks.get(key, None):
+            pass
         self.tasks[key] = task
-
 
     ### Tasks
     async def do_work(self):
@@ -180,7 +192,6 @@ class ServiceManager:
         ]
 
         async def handle_websocket(websocket, request_path):
-            print("Handling websocket")
             await self.register_websocket(websocket)
             
             async for message in websocket:
@@ -206,7 +217,7 @@ class ServiceManager:
             handle_websocket,
             host=self.host,
             port=self.port,
-            max_queue=1024,
+            max_queue=2028,
             max_size=None,
             extra_headers=extra_headers,
             origins=[None]
@@ -214,7 +225,6 @@ class ServiceManager:
 
         while True:
             await asyncio.Future()
-
 
     def run(self):
         multiprocessing.set_start_method("spawn")
