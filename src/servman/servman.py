@@ -91,6 +91,7 @@ class ServiceManager:
         self.logger = logging.getLogger("websockets.server")
         self.logger.setLevel(logging.ERROR)
         self.logger.addHandler(logging.StreamHandler())
+        self.n_messages = 0
     
 
     ### Websocket
@@ -183,7 +184,7 @@ class ServiceManager:
         self.tasks[key] = task
 
     ### Tasks
-    async def do_work(self):
+    async def run_server(self):
         print("Starting Servman.")
 
         extra_headers = [
@@ -195,6 +196,7 @@ class ServiceManager:
             await self.register_websocket(websocket)
             
             async for message in websocket:
+                self.n_messages += 1
                 try:
                     parcel: IParcel = json.loads(message)
                     await self.routes[parcel['routing']](parcel, websocket)
@@ -225,6 +227,20 @@ class ServiceManager:
 
         while True:
             await asyncio.Future()
+
+
+    async def print_metrics(self):
+        while True:
+            await asyncio.sleep(3)
+            print(f"Received {self.n_messages} messages.")
+
+
+    async def do_work(self):
+        tasks = [
+            self.run_server(),
+            self.print_metrics()
+        ]
+        await asyncio.gather(*tasks)
 
     def run(self):
         multiprocessing.set_start_method("spawn")

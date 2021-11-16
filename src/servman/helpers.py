@@ -6,7 +6,6 @@ from typing import Coroutine
 import json
 import traceback
 from uuid import uuid4 as uuidv4
-
 import websockets
 from typings import IParcel
 
@@ -78,6 +77,9 @@ class ServmanAgent:
     # async def finalize(self, parcel: IParcel):
     #     pass
 
+    async def on_connect(self):
+        # print(f"Success! Service with ID {self._agent_id} connected!")
+        pass
 
     # Websocket
     async def connect(self):
@@ -101,13 +103,13 @@ class ServmanAgent:
             traceback.print_exc()
             exit()
         
-        print(f"Success! Service with ID {self._agent_id} connected!")
+        await self.on_connect()
         self._connected = True
 
 
     async def wait_until_connected(self):
         while not self._connected:
-            await asyncio.sleep(0.1)
+            await asyncio.Future()
 
 
     # Websocket / Messages

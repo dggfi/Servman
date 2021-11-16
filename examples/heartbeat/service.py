@@ -68,7 +68,7 @@ class PongService:
             traceback.print_exc()
             exit()
         
-        print(f"Success! Service with  ID {self.agent_id} connected!")
+        # print(f"Success! Service with  ID {self.agent_id} connected!")
         self.connected = True
 
 
@@ -120,6 +120,6 @@ class PongService:
 
 
 def pong_service(*args, **kwargs):
-    print("Running a pong service.")
+    # print("Running a pong service.")
     pong_service = PongService(*args, **kwargs)
     pong_service.run()

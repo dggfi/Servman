@@ -36,7 +36,7 @@ class PingClient:
     async def pong(self, parcel: IParcel):
         self.pong_count += 1
         msg = parcel['data']['msg']
-        print(msg)
+        # print(msg)
 
 
     async def finalize(self, parcel: IParcel):
@@ -85,7 +85,7 @@ class PingClient:
     async def wait_until_ready(self):
         while not self.connected:
             await asyncio.sleep(0.1)
-        print(f"Client {self.agent_id} ready.")
+        # print(f"Client {self.agent_id} ready.")
 
 
     async def start_service(self):

@@ -13,7 +13,6 @@ class Service:
     
     def run(self):
         self.initiated = True
-        print("Running a new service.")
         self.process.start()
     
     def close(self):
