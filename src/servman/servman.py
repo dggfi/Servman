@@ -273,6 +273,7 @@ class ServiceManager:
         secret = parcel['data']['secret']
         if secret == self.secret:
             print("Killing Servman. Good bye!")
+            print(f"Received {self.n_messages} messages, servicing {len(self.id_to_websocket.values())} websockets and {len(self.identifier_to_service_pools.keys())} active agents.")
             try:
                 exit()
             except BaseException:

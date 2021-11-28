@@ -40,7 +40,10 @@ class PongService(ServmanAgent):
         await websocket.send(json.dumps(new_parcel))
         if self.ping_count >= 10:
             await asyncio.sleep(3)
-            exit()
+            try:
+                exit()
+            except BaseException:
+                pass
 
 
     ### Tasks
