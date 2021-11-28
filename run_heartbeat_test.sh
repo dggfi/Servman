@@ -1,3 +1,8 @@
+re='^[0-9]+$'
+if ! [[ $1 =~ $re ]] ; then
+   echo "Heartbeat test requires a number argument (number of clients to be created)" >&2; exit 1
+fi
+
 echo "Running a ping test."
 
 # Purge
@@ -14,10 +19,13 @@ source venv/bin/activate
 python3 -m pip install -U websockets
 python3 -m pip install -U path
 python3 -m pip install -U bidict
+python3 -m pip install -U pyjwt[crypto]
 
 # Configuration
 mkdir conf
-echo "{\"host\": \"localhost\", \"port\": 8000}" > conf/server_configuration.json
+echo "{\"host\": \"127.0.0.1\", \"port\": 8000, \"agent\": \"client\"}" > conf/client_configuration.json
+echo "{\"host\": \"127.0.0.1\", \"port\": 8000, \"agent\": \"servman\"}" > conf/server_configuration.json
+echo "{\"host\": \"127.0.0.1\", \"port\": 8000, \"agent\": \"service\"}" > conf/service_configuration.json
 
 cp examples/heartbeat/* src/servman/
 
@@ -25,7 +33,7 @@ cp examples/heartbeat/* src/servman/
 python3 src/servman/heartbeat_server.py &
 
 # Clients
-python3 src/servman/heartbeat_clients.py
+python3 src/servman/heartbeat_clients.py $1
 
 # Done
 deactivate

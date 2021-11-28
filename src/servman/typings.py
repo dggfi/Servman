@@ -6,7 +6,8 @@ from typing import Any, TypedDict, Literal
     websocket headers
     {
         'agent': 'servman' | 'client' | 'service',
-        'agent_id': string
+        'agent_id': string,
+        'connection_id'?: string
     }
 """
 

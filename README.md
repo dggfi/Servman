@@ -40,13 +40,17 @@ Then run
 
 > python3* client.py
 
-## Known scaling issues
+## Known issues
 
 Debugging a process with hundreds to thousands of open websocket connections is hard. Here are the most likely ones that you will run into.
 
+### Long time to establish connection
+
+When connecting to localhost, you must wait for your machine to resolve the address. This sounds , but in personal tests it can delay the WebSocket handshake long enough to cause a timeout.
+
 ### File descriptor limit
 
-Each open websocket connection requires a file to read and write from, if only in-memory. Many systems set a hard limit to number of these files available. If you open a ton of websocket connections only to see them begin dropping en masse, this is probably why.
+Each open websocket connection requires a file to read and write from, if only in-memory. Many systems set a hard limit to number of these files available. If you open a ton of websocket connections (>500) only to see them begin dropping en masse, this is probably why.
 
 Changing the file descriptor limit differs system to system. Ubuntu users can refer to this [this solution](https://askubuntu.com/questions/1049058/how-to-increase-max-open-files-limit-on-ubuntu-18-04). (Extra reading: the [How-To on ulimit and sysctl](https://www.linuxhowtos.org/Tips%20and%20Tricks/ulimit.htm))
 
@@ -54,10 +58,24 @@ Changing the file descriptor limit differs system to system. Ubuntu users can re
 
 If the service instances are particularly numerous, sizable, or complex, you may want to consider sharding, using servman as a node, or other kinds of systems architecture techniques. Implementations of these systems designs may be developed for servman in the future.
 
+## Tests
+
+There is one automated test available, a heartbeat client-service pair. To run it,
+
+> bash run_heartbeat_test.sh [n]
+
+where `n` is the number of pairs you wish to create. Approximately four websocket connections will be created for each pair. The test will conclude in a spew about broken websocket connections. Additionally, using 500 or more of these pairs will likely cause breakage in many different ways even if your file descriptor limit is properly configured. To run it,
+
+The Servman server *may* continue to run on its own when completed. You will have to manually kill the process and remove the copied files after. This test will be fixed in the future. You may run
+
+> pkill -f python*
+
+to kill all python processes on your machine for a full process clean-up. This may close your terminal.
+
 ## Future
 
 Planned features include
-* Client connection tokens
+* Admin tokens
+* Supervisor mode
 * Servman nodes
 * Websocket SSL
-* Multiple Client-to-Service websocket channels

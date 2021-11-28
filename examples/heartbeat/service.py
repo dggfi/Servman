@@ -5,121 +5,80 @@ from asyncio.queues import Queue
 from collections import defaultdict
 from uuid import uuid4 as uuidv4
 import websockets
+from helpers import ServmanAgent, action
 from typings import IParcel
+from path import Path
 
 
-class PongService:
+class PongService(ServmanAgent):
     def __init__(self, *args, **kwargs):
-        self.agent_id = str(uuidv4())
-        self.owner_agent_id = kwargs['owner_id']
+        super().__init__(*args, **kwargs)
 
         # State
         self.ping_count = 0
-        self.connected = False
-        self.websocket = None
 
-        # Collections
-        self.message_queue = Queue()
-        actions = {
-            'ping': self.ping,
-        }
-        def return_bad_action(): return self.bad_action
-        self.actions = defaultdict(return_bad_action, actions)
-
-        # Misc.
-        self.loop = asyncio.get_event_loop()
-
+        # Connection details
+        # You will need this information to send parcels to the client
+        self.owner_id = kwargs['owner_id']
+        self.owner_connection_id = kwargs['owner_connection_id']
+        self.identifier = kwargs['identifier']
 
     ### Actions
-    async def ping(self, parcel: IParcel):
+    @action()
+    async def ping(self, parcel: IParcel, websocket, queue):
         self.ping_count += 1
 
         new_parcel: IParcel = {
             'routing': 'client',
-            'destination_id': self.owner_agent_id,
+            'destination_id': self.owner_connection_id,
             'action': 'pong',
             'data': {
-                'msg': f"PONG! ({self.ping_count} pings and counting from {self.agent_id}!)"
+                'msg': f"PONG! ({self.ping_count} pings and counting from {self._agent_id}!)"
             }
         }
 
-        await self.websocket.send(json.dumps(new_parcel))
+        await websocket.send(json.dumps(new_parcel))
+        if self.ping_count >= 10:
+            await asyncio.sleep(3)
+            exit()
 
 
     ### Tasks
-    async def connect(self):
-        port = 8000
-        host = 'localhost'
-        connection_uri = f"ws://{host}:{port}"
-
-        extra_headers = [
-            ('agent', 'service'),
-            ('agent_id', self.agent_id)
-        ]
-
-        try:
-            self.websocket = await websockets.connect(
-                connection_uri,
-                extra_headers=extra_headers
-            )
-        except Exception as e:
-            print(f"Service with ID {self.agent_id} failed to connect!")
-            print(e)
-            traceback.print_exc()
-            exit()
-        
-        # print(f"Success! Service with  ID {self.agent_id} connected!")
-        self.connected = True
-
-
-    async def wait_until_ready(self):
-        while not self.connected:
-            await asyncio.sleep(0.1)
-    
-
-    async def finalize(self):
-        await self.wait_until_ready()
-        
+    async def on_connect(self, websocket, queue):
         parcel: IParcel = {
             'routing': 'client',
-            'destination_id': self.owner_agent_id,
-            'action': 'finalize',
+            'destination_id': self.owner_connection_id,
+            'action': 'catch_service_credentials',
             'data': {
-                'service_agent_id': self.agent_id
+                'identifier': self.identifier,
+                'connection_id': websocket.request_headers['connection_id']
             }
         }
 
-        await self.websocket.send(json.dumps(parcel))
+        await self._primary_websocket.send(json.dumps(parcel))
 
-
-    async def receive(self):
-        await self.wait_until_ready()
+    async def consume(self):
+        await self.wait_until_connected()
         while self.ping_count < 10:
-            packet = await self.websocket.recv()
+            packet = await self._primary_websocket.recv()
             parcel = json.loads(packet)
-            asyncio.create_task(self.actions[parcel['action']](parcel))
-    
+            callback = self._callbacks[parcel['action']]
+            asyncio.create_task(callback(self, parcel, self._primary_websocket, self._primary_message_queue))
 
-    async def send(self):
-        await self.wait_until_ready()
+    async def produce(self):
+        await self.wait_until_connected()
+
         while self.ping_count < 10:
-            await self.websocket.send(await self.message_queue.get())
-
-    async def do_work(self):
-        tasks = [
-            self.connect(),
-            self.finalize(),
-            self.receive(),
-            self.send()
-        ]
-        await asyncio.gather(*tasks)
-
-    def run(self):
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.do_work())
+            await self._primary_websocket.send(await self._primary_message_queue.get())
 
 
 def pong_service(*args, **kwargs):
-    # print("Running a pong service.")
+    config_file = Path("conf/service_configuration.json")
+    if not config_file.exists():
+        print("Error: Connection config for service does not exist!")
+        exit()
+    connection_config = json.loads(config_file.read_text(encoding="utf-8"))
+    kwargs["connection_config"] = connection_config
+
     pong_service = PongService(*args, **kwargs)
     pong_service.run()

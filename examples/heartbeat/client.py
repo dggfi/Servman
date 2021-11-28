@@ -5,125 +5,105 @@ from asyncio.queues import Queue
 from collections import defaultdict
 from uuid import uuid4 as uuidv4
 import websockets
+from helpers import action, ServmanAgent
 from typings import IParcel
-from helpers import ServmanAgent
 
-class PingClient:
-    def __init__(self):
-        self.agent_id = str(uuidv4())
+
+class PingClient(ServmanAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         # State
-        self.connected = False
-        self.websocket = None
         self.ping_count = 0
         self.pong_count = 0
+        self.complete = False
 
-        # Collections
-        self.service_agent_id = None
-        self.message_queue = Queue()
-        actions = {
-            'pong': self.pong,
-            'finalize': self.finalize
-        }
-        def return_bad_action(): return self.bad_action
-        self.actions = defaultdict(return_bad_action, actions)
-
-        # Misc.
-        self.loop = asyncio.get_event_loop()
-
+        self.identifier = f'my_heartbeat_{str(uuidv4())}'
 
     ### Actions
-    async def pong(self, parcel: IParcel):
+    @action()
+    async def pong(self, parcel: IParcel, websocket, queue):
         self.pong_count += 1
         msg = parcel['data']['msg']
-        # print(msg)
+        print(msg)
 
+    ### Events
+    async def on_service_created(self, identifier, connection_id, websocket, queue):
+        purpose = 'communicate'
+        await self.new_proxy_connection(identifier, purpose)
+        pending_future = self.new_wait_until_connected(purpose)
+        await pending_future()
 
-    async def finalize(self, parcel: IParcel):
-        self.service_agent_id = parcel['data']['service_agent_id']
-
-        new_parcel: IParcel = {
+        proxy_connection_id = self._proxy_connection_ids[purpose]
+        ping_parcel: IParcel = {
             'routing': 'service',
-            'destination_id': self.service_agent_id,
+            'destination_id': proxy_connection_id,
             'action': 'ping'
         }
+        ping_parcel = json.dumps(ping_parcel)
 
-        new_parcel = json.dumps(new_parcel)
-
+        queue = self._proxy_message_queues[purpose]
         ping_count = 0
         while ping_count < 10:
-            await self.websocket.send(new_parcel)
+            await queue.put(ping_parcel)
             ping_count += 1
             await asyncio.sleep(1)
+        self.complete = True
 
-
-    ### Tasks
-    async def connect(self):
-        port = 8000
-        host = 'localhost'
-        connection_uri = f"ws://{host}:{port}"
-
-        extra_headers = [
-            ('agent', 'client'),
-            ('agent_id', self.agent_id)
-        ]
-
+        kill_parcel: IParcel = {
+            'routing': 'servman',
+            'action': 'kill',
+            'data': { 'secret': 'my_secret' }
+        }
+        kill_parcel = json.dumps(kill_parcel)
+        await queue.put(kill_parcel)
+        await asyncio.sleep(5)
         try:
-            self.websocket = await websockets.connect(
-                connection_uri,
-                extra_headers=extra_headers
-            )
-        except Exception as e:
-            print(f"Service with ID {self.agent_id} failed to connect!")
-            print(e)
-            traceback.print_exc()
-            exit()        
-        self.connected = True
-
+            exit()
+        except BaseException:
+            pass
 
     ### Tasks
-    async def wait_until_ready(self):
-        while not self.connected:
-            await asyncio.sleep(0.1)
-        # print(f"Client {self.agent_id} ready.")
-
-
-    async def start_service(self):
-        await self.wait_until_ready()
-
+    async def on_connect(self, websocket, queue):
+        """
+            Immediately request a new Servman task on connection.
+        """
+        connection_id = self._primary_websocket.request_headers['connection_id']
         parcel: IParcel = {
             'routing': 'servman',
             'action': 'create_service',
             'data': {
                 'args': [],
                 'kwargs': {
-                    'owner_id': self.agent_id
+                    'owner_id': self._agent_id,
+                    'owner_connection_id': connection_id,
+                    'identifier': self.identifier
                 },
                 'target': 'heartbeat',
-                'hash': 'my_hash'
+                'options': {}
             }
         }
 
-        await self.message_queue.put(json.dumps(parcel))
-
+        await self._primary_message_queue.put(json.dumps(parcel))
 
     async def consume(self):
-        await self.wait_until_ready()
-        while self.pong_count < 10:
-            packet = await self.websocket.recv()
+        await self.wait_until_connected()
+
+        while not self.complete:
+            packet = await self._primary_websocket.recv()
             parcel = json.loads(packet)
-            asyncio.create_task(self.actions[parcel['action']](parcel))
-    
+            callback = self._callbacks[parcel['action']]
+            asyncio.create_task(callback(self, parcel, self._primary_websocket, self._primary_message_queue))    
 
     async def produce(self):
-        await self.wait_until_ready()
-        while self.pong_count < 10:
-            await self.websocket.send(await self.message_queue.get())
+        await self.wait_until_connected()
+
+        while not self.complete:
+            await self._primary_websocket.send(await self._primary_message_queue.get())
 
     def get_tasks(self):
         return [
             self.connect,
-            self.start_service,
             self.consume,
             self.produce
         ]
