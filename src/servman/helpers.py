@@ -24,7 +24,7 @@ from time import time
 
 # Types
 ActionT = TypeVar('ActionT', bound='Action')
-ServmanAgentT = TypeVar('ServmanAgentT', bound='ServmanAgent')
+AgentT = TypeVar('AgentT', bound='Agent')
 
 
 class Action:
@@ -106,8 +106,62 @@ def action(cls=Action, **attrs):
     return decorator
 
 
-class ServmanAgent:
-    def __init__(self, *args, **kwargs):
+
+class Agent:
+    def __init__(self):
+        """
+            An Agent is a Cog-like that has actions.
+        """
+        self._callbacks = defaultdict(self.return_bad_callback, {}) # only the callbacks
+        self._actions = {} # the Action instances
+
+        self.inject_actions(self)
+
+    # Actions / injectors
+    def inject_action(self, action: Action, overwrite=False):
+        registered = self._actions.get(action.name, None)
+        if registered and not overwrite:
+            print("Error: Action naming collision!")
+            print(f"Action {action.name} would overwrite another action {registered.name}")
+            raise ActionCollision
+        
+        action.agent = self
+
+        self._actions[action.name] = action
+        aliases = set(action.aliases)
+        for alias in aliases:
+            callback_registered = self._callbacks.get(alias, None)
+            if overwrite or not callback_registered:
+                self._callbacks[alias] = action.callback
+            else:
+                print("Error: Action naming collision!")
+                print(f"Action {action.name} with alias {alias} would overwrite another action {registered.name}")
+                del self._actions[action.name]
+                raise ActionCollision
+
+    def inject_actions(self, agent: AgentT=None, overwrite=False):
+        """
+            Register all Actions that the agent is aware of.
+            If an agent is not provided, it will default to the instance.
+
+            When overwrie is set to True, it will not throw an error
+            if there is a name collision.
+        """
+        agent = agent or self
+        if not isinstance(agent, ServmanAgent):
+            raise TypeError(f"Obj {agent} must be an instance of a ServmanAgent for injection")
+
+        for name in dir(self):
+            attr = getattr(self, name)
+            if isinstance(attr, Action):
+                self.inject_action(attr, overwrite)
+    
+    def return_bad_callback(self): return self.bad_callback
+
+
+
+class ServmanAgent(Agent):
+    def __init__(self, connection_config, *args, **kwargs):
         """
             Use this class helper to create a Client or Service. 
             The notes here will guide you in creating a Client-ServiceManager-Service
@@ -115,18 +169,9 @@ class ServmanAgent:
 
             Agent in config should be assigned either of 'client' or 'service'.
         """
-
-        self._callbacks = defaultdict(self.return_bad_callback, {}) # only the callbacks
-        self._actions = {} # the Action instances
-
-        self.inject_actions(self)
-
+        super().__init__(*args, **kwargs)
 
         # Connection
-        connection_config = kwargs.get('connection_config', None)
-        if not connection_config:
-            print(f"Error: Connection config for agent {self} not found!")
-            exit()
         self._connection_config = connection_config
         self._primary_websocket = None # Connection to servman
         self._primary_connection_ids = {} # identifer: connection_id
@@ -261,48 +306,6 @@ class ServmanAgent:
     @action()
     async def force_close(self, parcel: IParcel, websocket, queue):
         exit()
-
-
-    # Actions / injectors
-    def inject_action(self, action: Action, overwrite=False):
-        registered = self._actions.get(action.name, None)
-        if registered and not overwrite:
-            print("Error: Action naming collision!")
-            print(f"Action {action.name} would overwrite another action {registered.name}")
-            raise ActionCollision
-        
-        action.agent = self
-
-        self._actions[action.name] = action
-        aliases = set(action.aliases)
-        for alias in aliases:
-            callback_registered = self._callbacks.get(alias, None)
-            if overwrite or not callback_registered:
-                self._callbacks[alias] = action.callback
-            else:
-                print("Error: Action naming collision!")
-                print(f"Action {action.name} with alias {alias} would overwrite another action {registered.name}")
-                del self._actions[action.name]
-                raise ActionCollision
-
-    def inject_actions(self, agent: ServmanAgentT=None, overwrite=False):
-        """
-            Register all Actions that the agent is aware of.
-            If an agent is not provided, it will default to the instance.
-
-            When overwrie is set to True, it will not throw an error
-            if there is a name collision.
-        """
-        agent = agent or self
-        if not isinstance(agent, ServmanAgent):
-            raise TypeError(f"Obj {agent} must be an instance of a ServmanAgent for injection")
-
-        for name in dir(self):
-            attr = getattr(self, name)
-            if isinstance(attr, Action):
-                self.inject_action(attr, overwrite)
-    
-    def return_bad_callback(self): return self.bad_callback
 
 
     ### Events

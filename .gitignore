@@ -1,8 +1,11 @@
-build.sh
+venv/
+.venv/
 __pycache__
+
+conf/
 dist/
 src/__pycache__
 src/servman_*
 src/servman/future/
-venv/
-.venv/
+
+build.sh

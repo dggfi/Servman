@@ -12,7 +12,7 @@ from path import Path
 
 class PongService(ServmanAgent):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(connection_config=kwargs['connection_config'])
 
         # State
         self.ping_count = 0
