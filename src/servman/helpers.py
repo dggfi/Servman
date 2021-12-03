@@ -149,7 +149,7 @@ class Agent:
         if not isinstance(agent, Agent):
             raise TypeError(f"Obj {agent} must be an instance of a ServmanAgent for injection")
 
-        for name in dir(self):
+        for name in dir(agent):
             attr = getattr(self, name)
             if isinstance(attr, Action):
                 self.inject_action(attr, overwrite, graft)
