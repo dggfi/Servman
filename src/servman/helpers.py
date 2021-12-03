@@ -112,34 +112,33 @@ class Agent:
         """
             An Agent is a Cog-like that has actions.
         """
-        self._callbacks = defaultdict(self.return_bad_callback, {}) # only the callbacks
-        self._actions = {} # the Action instances
+        self._actions = defaultdict(self.return_bad_callback, {}) # only the callbacks
 
         self.inject_actions(self)
 
     # Actions / injectors
-    def inject_action(self, action: Action, overwrite=False):
+    def inject_action(self, action: Action, overwrite=False, graft=False):
         registered = self._actions.get(action.name, None)
         if registered and not overwrite:
             print("Error: Action naming collision!")
             print(f"Action {action.name} would overwrite another action {registered.name}")
             raise ActionCollision
         
-        action.agent = self
+        if not graft:
+            action.agent = self
 
-        self._actions[action.name] = action
         aliases = set(action.aliases)
         for alias in aliases:
-            callback_registered = self._callbacks.get(alias, None)
-            if overwrite or not callback_registered:
-                self._callbacks[alias] = action.callback
+            action_registered = self._actions.get(alias, None)
+            if overwrite or not action_registered:
+                self._actions[alias] = action
             else:
                 print("Error: Action naming collision!")
                 print(f"Action {action.name} with alias {alias} would overwrite another action {registered.name}")
                 del self._actions[action.name]
                 raise ActionCollision
 
-    def inject_actions(self, agent: AgentT=None, overwrite=False):
+    def inject_actions(self, agent: AgentT=None, overwrite=False, graft=False):
         """
             Register all Actions that the agent is aware of.
             If an agent is not provided, it will default to the instance.
@@ -154,7 +153,7 @@ class Agent:
         for name in dir(self):
             attr = getattr(self, name)
             if isinstance(attr, Action):
-                self.inject_action(attr, overwrite)
+                self.inject_action(attr, overwrite, graft)
     
     def return_bad_callback(self): return self.bad_callback
 
@@ -222,7 +221,6 @@ class ServmanAgent(Agent):
         assignment:
 
         self._actions[k] = ActionT
-        self._callbacks[k] = f
     """
 
     # Example action
@@ -467,8 +465,8 @@ class ServmanAgent(Agent):
                 packet = await websocket.recv()
                 parcel: IParcel = json.loads(packet)
                 # Warning careful not to block the consumer
-                callback = self._callbacks[parcel['action']]
-                loop.create_task(callback(self, parcel, websocket, queue))
+                action = self._actions[parcel['action']]
+                loop.create_task(action.callback(action.agent, parcel, websocket, queue))
 
         loop.create_task(new_consumer())
     
@@ -489,8 +487,8 @@ class ServmanAgent(Agent):
             packet = await self._primary_websocket.recv()
             parcel: IParcel = json.loads(packet)
             # Warning: careful to not block the consumer
-            callback = self._callbacks[parcel['action']]
-            loop.create_task(callback(parcel, self._primary_websocket))
+            action = self._actions[parcel['action']]
+            loop.create_task(action.callback(parcel, self._primary_websocket))
 
 
     async def produce(self):

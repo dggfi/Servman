@@ -10,6 +10,7 @@ from uuid import uuid4 as uuidv4
 from collections import defaultdict
 from typings import IConnectionConfig, IParcel
 from service_pool import ServicePool, Pipeline
+from path import Path
 from typing import Callable
 
 
@@ -29,7 +30,7 @@ class ServiceManager:
         For a more complex integration, checkout the MafiaBot project which
         uses discord.py (https://github.com/dggfi/MafiaBot)
     """
-    def __init__(self, config_path):
+    def __init__(self, config_path, log_filename='logs/servman.log'):
         self._agent_id = str(uuidv4())
 
         # Config
@@ -92,12 +93,18 @@ class ServiceManager:
 
         # Misc.
         self.t_ping = None
-        self.logger = logging.getLogger("websockets.server")
-        self.logger.setLevel(logging.ERROR)
-        self.logger.addHandler(logging.StreamHandler())
         self.n_messages = 0
+
+        # Logger
+        self.logger = logging.getLogger("websockets.server")
+        self.logger.setLevel(logging.INFO)
+        # log_destination = Path(log_filename)
+        handler = logging.FileHandler(filename=log_filename, encoding='utf-8', mode='w')
+        handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+        self.logger.addHandler(handler)
     
         # Security
+        self.killed = False
         self.secret = 'my_secret'
 
 
@@ -153,7 +160,6 @@ class ServiceManager:
             There may be concurrency issues when a client with multiple
             connections drops.
         """
-        print(f"Unregistering {websocket.request_headers['agent_id']}")
 
         connection_id = websocket.request_headers['connection_id']
 
@@ -177,11 +183,11 @@ class ServiceManager:
 
     ### Actions -- Error
     async def bad_action(self, parcel: IParcel, websocket):
-        print(f"Error: Got a bad action! '{parcel['action']}'' in parcel {parcel}")
+        self.logger.error(f"Error: Got a bad action! '{parcel['action']}'' in parcel {parcel}")
     
 
     async def bad_route(self, parcel: IParcel, websocket):
-        print(f"Error: Got a bad route! '{parcel['route']}' in parcel {parcel}")
+        self.logger.error(f"Error: Got a bad route! '{parcel['route']}' in parcel {parcel}")
     
 
     # Actions -- Parcels
@@ -272,14 +278,15 @@ class ServiceManager:
     async def kill(self, parcel: IParcel, websocket):
         secret = parcel['data']['secret']
         if secret == self.secret:
+            self.killed = True
             print("Killing Servman. Good bye!")
-            print(f"Received {self.n_messages} messages, servicing {len(self.id_to_websocket.values())} websockets and {len(self.identifier_to_service_pools.keys())} active agents.")
+            self.logger.info(f"Received {self.n_messages} messages, servicing {len(self.id_to_websocket.values())} websockets and {len(self.identifier_to_service_pools.keys())} active agents.")
             try:
                 exit()
             except BaseException:
                 exit()
         else:
-            print(f"Connection with ID {websocket.request_headers['connection_id']} attempted to kill Servman but failed to guess its secret.")
+            self.logger.info(f"Connection with ID {websocket.request_headers['connection_id']} attempted to kill Servman but failed to guess its secret.")
 
     def register_task(self, key: str, task: Callable):
         if self.tasks.get(key, None):
@@ -314,7 +321,7 @@ class ServiceManager:
             identifier = websocket.request_headers['identifier']
             purpose = websocket.request_headers['purpose']
         except KeyError:
-            print("KeyError in build_pipeline")
+            self.logger.error("KeyError in build_pipeline")
             return
 
 
@@ -362,7 +369,7 @@ class ServiceManager:
             }
             await service_pool.service_connection.send(json.dumps(bridge_service_parcel))
         else:
-            print("@@@@@@@@@@@@@@@@@@@@@@@@ >< This should never happen. Synchronization error? Bad request?")
+            self.logger.error("@@@@@@@@@@@@@@@@@@@@@@@@ >< This should never happen. Synchronization error? Bad request?")
 
     ### Tasks
     async def run_server(self):
@@ -382,11 +389,11 @@ class ServiceManager:
                     parcel: IParcel = json.loads(message)
                     await self.routes[parcel['routing']](parcel, websocket)
             except JSONDecodeError:
-                print(f"JSON Error in ServiceManager.handle_websocket: Message not encoded in JSON.\n\n")
+                self.logger.exception(f"JSON Error in ServiceManager.handle_websocket: Message not encoded in JSON.\n\n")
             except ConnectionClosedError:
-                print(f"Websocket {websocket} closed unexpectedly.")
+                self.logger.exception(f"Websocket {websocket} closed unexpectedly.")
             except Exception as e:
-                print(f"\n\nOther Error in ServiceManager.handle_websocket: {e}\n\n")
+                self.logger.exception(f"\n\nOther Error in ServiceManager.handle_websocket: {e}\n\n")
                 traceback.print_exc()
                 new_parcel: IParcel = {
                     'routing': parcel['routing'],
@@ -407,20 +414,20 @@ class ServiceManager:
             origins=[None]
         )
 
-        while True:
+        while not self.killed:
             await asyncio.Future()
 
 
-    async def print_metrics(self):
-        while True:
+    async def log_metrics(self):
+        while not self.killed:
             await asyncio.sleep(3)
-            print(f"Received {self.n_messages} messages, servicing {len(self.id_to_websocket.values())} websockets and {len(self.identifier_to_service_pools.keys())} active agents.")
+            self.logger.info(f"Received {self.n_messages} messages, servicing {len(self.id_to_websocket.values())} websockets and {len(self.identifier_to_service_pools.keys())} active agents.")
 
 
     async def do_work(self):
         tasks = [
             self.run_server(),
-            self.print_metrics()
+            self.log_metrics()
         ]
         await asyncio.gather(*tasks)
 

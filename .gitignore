@@ -4,6 +4,7 @@ __pycache__
 
 conf/
 dist/
+logs/
 src/__pycache__
 src/servman_*
 src/servman/future/

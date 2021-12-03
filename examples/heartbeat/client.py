@@ -92,8 +92,8 @@ class PingClient(ServmanAgent):
         while not self.complete:
             packet = await self._primary_websocket.recv()
             parcel = json.loads(packet)
-            callback = self._callbacks[parcel['action']]
-            asyncio.create_task(callback(self, parcel, self._primary_websocket, self._primary_message_queue))    
+            action = self._actions[parcel['action']]
+            asyncio.create_task(action.callback(action.agent, parcel, self._primary_websocket, self._primary_message_queue))    
 
     async def produce(self):
         await self.wait_until_connected()
