@@ -8,8 +8,8 @@ from json.decoder import JSONDecodeError
 from path import Path
 from uuid import uuid4 as uuidv4
 from collections import defaultdict
-from typings import IConnectionConfig, IParcel
-from service_pool import ServicePool, Pipeline
+from servman.typings import IConnectionConfig, IParcel
+from servman.service_pool import ServicePool, Pipeline
 from path import Path
 from typing import Callable
 

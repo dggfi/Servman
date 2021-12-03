@@ -1,5 +1,5 @@
 from multiprocessing import Process
-from typings import IParcel
+from servman.typings import IParcel
 import json
 
 

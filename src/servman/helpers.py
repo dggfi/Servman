@@ -16,10 +16,9 @@ import json
 import traceback
 from uuid import uuid4 as uuidv4
 import websockets
-from typings import IParcel
-from typing import Type
+from servman. typings import IParcel
 import inspect
-from ext import ActionCollision, ConnectTimeout
+from servman.ext import ActionCollision
 from time import time
 
 # Types
