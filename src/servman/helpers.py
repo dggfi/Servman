@@ -146,7 +146,7 @@ class Agent:
             if there is a name collision.
         """
         agent = agent or self
-        if not isinstance(agent, ServmanAgent):
+        if not isinstance(agent, Agent):
             raise TypeError(f"Obj {agent} must be an instance of a ServmanAgent for injection")
 
         for name in dir(self):
