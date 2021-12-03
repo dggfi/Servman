@@ -18,8 +18,6 @@ source venv/bin/activate
 # Install dependencies
 python3 -m pip install -U websockets
 python3 -m pip install -U path
-python3 -m pip install -U bidict
-python3 -m pip install -U pyjwt[crypto]
 
 # Configuration
 mkdir conf
