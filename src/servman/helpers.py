@@ -251,6 +251,7 @@ class ServmanAgent(Agent):
             print(e)
         finally:
             print("Uh okay then")
+        print("So nothing is happening")
 
     ### Actions / Proxies
     @action()
