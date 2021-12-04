@@ -249,6 +249,8 @@ class ServmanAgent(Agent):
             await self.on_service_created(identifier, connection_id, websocket, queue)
         except Exception as e:
             print(e)
+        finally:
+            print("Uh okay then")
 
     ### Actions / Proxies
     @action()
