@@ -483,13 +483,19 @@ class ServmanAgent(Agent):
         await self.wait_until_connected()
 
         loop = asyncio.get_event_loop()
-        while True:
-            packet = await self._primary_websocket.recv()
-            parcel: IParcel = json.loads(packet)
-            # Warning: careful to not block the consumer
-            action = self._actions[parcel['action']]
-            print(f"{self._agent} {self} Got an action: {parcel['action']}")
-            loop.create_task(action.callback(action.gent, parcel, self._primary_websocket))
+        try:
+            while True:
+                packet = await self._primary_websocket.recv()
+                parcel: IParcel = json.loads(packet)
+                # Warning: careful to not block the consumer
+                action = self._actions[parcel['action']]
+                print(f"{self._agent} {self} Got an action: {parcel['action']}")
+                print(action)
+                print(action.agent)
+                print()
+                loop.create_task(action.callback(action.agent, parcel, self._primary_websocket))
+        except Exception as e:
+            print(e)
 
 
     async def produce(self):
