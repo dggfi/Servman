@@ -245,7 +245,10 @@ class ServmanAgent(Agent):
         connection_id = parcel['data']['connection_id']
         self._primary_connection_ids[identifier] = connection_id
         print(self.on_service_created)
-        await self.on_service_created(identifier, connection_id, websocket, queue)
+        try:
+            await self.on_service_created(identifier, connection_id, websocket, queue)
+        except Exception as e:
+            print(e)
 
     ### Actions / Proxies
     @action()
