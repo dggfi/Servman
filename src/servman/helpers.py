@@ -240,6 +240,7 @@ class ServmanAgent(Agent):
         """
             A service that has just been created should send these.
         """
+        print("ayayaya")
         identifier = parcel['data']['identifier']
         connection_id = parcel['data']['connection_id']
         self._primary_connection_ids[identifier] = connection_id
@@ -479,7 +480,9 @@ class ServmanAgent(Agent):
         loop.create_task(new_producer())            
 
     async def consume(self):
+        print('oo')
         await self.wait_until_connected()
+        print('ahhghh')
 
         loop = asyncio.get_event_loop()
         while True:
