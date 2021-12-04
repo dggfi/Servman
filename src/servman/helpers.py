@@ -493,7 +493,7 @@ class ServmanAgent(Agent):
                 print(action)
                 print(action.agent)
                 print()
-                loop.create_task(action.callback(action.agent, parcel, self._primary_websocket))
+                loop.create_task(action.callback(action.agent, parcel, self._primary_websocket, self._primary_message_queue))
         except Exception as e:
             print(e)
 
