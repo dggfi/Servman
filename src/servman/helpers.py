@@ -154,17 +154,12 @@ class Agent:
             if isinstance(attr, Action):
                 self.inject_action(attr, overwrite, graft)
         
-        print(self.bad_callback.aliases)
         for alias in self.bad_callback.aliases:
-            print(f"Popping a bad_callback alias '{alias}'' for {self}")
             self._actions.pop(alias, None)
 
     @action()
     async def bad_callback(self, parcel: IParcel, websocket, queue):
-        print(self)
-        print(self.__repr__)
-        print(f"Received a bad callback: {parcel['action']}")
-        print(dict(self._actions))
+        print(f"{self} Received a bad callback: {parcel['action']}")
 
     def return_bad_callback(self): return self.bad_callback
 
@@ -252,18 +247,11 @@ class ServmanAgent(Agent):
         """
             A service that has just been created should send these.
         """
-        print("ayayaya")
         identifier = parcel['data']['identifier']
         connection_id = parcel['data']['connection_id']
         self._primary_connection_ids[identifier] = connection_id
-        print(self.on_service_created)
-        try:
-            await self.on_service_created(identifier, connection_id, websocket, queue)
-        except Exception as e:
-            print(e)
-        finally:
-            print("Uh okay then")
-        print("So nothing is happening")
+        await self.on_service_created(identifier, connection_id, websocket, queue)
+
 
     ### Actions / Proxies
     @action()
@@ -508,10 +496,6 @@ class ServmanAgent(Agent):
                 parcel: IParcel = json.loads(packet)
                 # Warning: careful to not block the consumer
                 action = self._actions[parcel['action']]
-                print(f"{self._agent} {self} Got an action: {parcel['action']}")
-                print(action)
-                print(action.agent)
-                print()
                 loop.create_task(action.callback(action.agent, parcel, self._primary_websocket, self._primary_message_queue))
         except Exception as e:
             print(e)
