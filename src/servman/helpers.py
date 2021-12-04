@@ -244,6 +244,7 @@ class ServmanAgent(Agent):
         identifier = parcel['data']['identifier']
         connection_id = parcel['data']['connection_id']
         self._primary_connection_ids[identifier] = connection_id
+        print(self.on_service_created)
         await self.on_service_created(identifier, connection_id, websocket, queue)
 
     ### Actions / Proxies
