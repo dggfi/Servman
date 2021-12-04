@@ -159,7 +159,7 @@ class Agent:
             self._actions.pop(alias, None)
 
     @action()
-    def bad_callback(self, parcel: IParcel, websocket, queue):
+    async def bad_callback(self, parcel: IParcel, websocket, queue):
         print(f"Received a bad callbacK: {parcel['action']}")
         print(dict(self._actions))
 
