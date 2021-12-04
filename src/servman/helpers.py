@@ -488,7 +488,7 @@ class ServmanAgent(Agent):
             parcel: IParcel = json.loads(packet)
             # Warning: careful to not block the consumer
             action = self._actions[parcel['action']]
-            print(f"Got an action: {parcel['action']}")
+            print(f"{self._agent} {self} Got an action: {parcel['action']}")
             loop.create_task(action.callback(parcel, self._primary_websocket))
 
 
