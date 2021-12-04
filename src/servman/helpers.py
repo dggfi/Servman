@@ -111,7 +111,7 @@ class Agent:
         """
             An Agent is a Cog-like that has actions.
         """
-        self._actions = defaultdict(self.return_bad_callback, {}) # only the callbacks
+        self._actions = defaultdict(self.return_bad_callback, {})
 
         self.inject_actions(self)
 
@@ -153,7 +153,16 @@ class Agent:
             attr = getattr(agent, name)
             if isinstance(attr, Action):
                 self.inject_action(attr, overwrite, graft)
-    
+        
+        for alias in self.bad_callback.aliases:
+            print("Popping a bad_callback alias")
+            self._actions.pop(alias, None)
+
+    @action()
+    def bad_callback(self, parcel: IParcel, websocket, queue):
+        print(f"Received a bad callbacK: {parcel['action']}")
+        print(dict(self._actions))
+
     def return_bad_callback(self): return self.bad_callback
 
 
