@@ -489,7 +489,7 @@ class ServmanAgent(Agent):
             # Warning: careful to not block the consumer
             action = self._actions[parcel['action']]
             print(f"{self._agent} {self} Got an action: {parcel['action']}")
-            loop.create_task(action.callback(parcel, self._primary_websocket))
+            loop.create_task(action.callback(action.gent, parcel, self._primary_websocket))
 
 
     async def produce(self):
