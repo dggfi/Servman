@@ -155,12 +155,15 @@ class Agent:
                 self.inject_action(attr, overwrite, graft)
         
         for alias in self.bad_callback.aliases:
+            print(alias)
             print("Popping a bad_callback alias")
             self._actions.pop(alias, None)
 
     @action()
     async def bad_callback(self, parcel: IParcel, websocket, queue):
-        print(f"Received a bad callbacK: {parcel['action']}")
+        print(self)
+        print(self.__name__)
+        print(f"Received a bad callback: {parcel['action']}")
         print(dict(self._actions))
 
     def return_bad_callback(self): return self.bad_callback
